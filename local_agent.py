@@ -43,7 +43,7 @@ def banner():
     print(f"{BG_HITAM}{EMAS}         LOKAL AI - ULTIMATE TRADING AGENT          {RESET}")
     print(f"{BG_HITAM}{EMAS}===================================================={RESET}")
     print(f"{PUTIH} Status Waktu : {EMAS}{waktu_sekarang}{RESET}")
-    print(f"{PUTIH} Mode Master: Perfect Tab Switcher & Full Skills    {RESET}")
+    print(f"{PUTIH} Mode Master: Local App Finder + Precise Google Fallback{RESET}")
     print(f"{BG_HITAM}{EMAS}----------------------------------------------------{RESET}\n")
 
 def kunci_fokus_ai_lokal():
@@ -72,6 +72,7 @@ def deteksi_platform_key(teks):
     elif any(k in p for k in ["fb", "facebook"]): return "facebook"
     elif any(k in p for k in ["gemini"]): return "gemini"
     elif any(k in p for k in ["whatsapp", "wa", "whatap"]): return "whatsapp"
+    elif any(k in p for k in ["github"]): return "github"
     elif any(k in p for k in ["google"]): return "google"
     return None
 
@@ -203,6 +204,7 @@ def cari_file_100_persen(keyword):
     return hasil_unik[:20]
 
 def cari_software_100_persen(nama_app):
+    """Pencarian Akurat Software Terinstal di Laptop (.exe / .lnk)"""
     lokasi_pencarian = [
         os.path.join(os.environ['USERPROFILE'], "Desktop"),
         r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
@@ -212,23 +214,38 @@ def cari_software_100_persen(nama_app):
         r"C:\Program Files (x86)"
     ]
     
+    keyword_target = nama_app.lower().strip()
     daftar_exe = {}
+    
     for direktori in lokasi_pencarian:
         if not os.path.exists(direktori):
             continue
-        for root, dirs, files in os.walk(direktori):
-            for file in files:
-                if file.lower().endswith(('.exe', '.lnk', '.url', '.msc', '.bat')):
-                    nama_file = file.lower()
-                    if "streaming" in nama_file or "client" in nama_file:
-                        continue
-                    nama_bersih = os.path.splitext(file)[0].lower()
-                    path_lengkap = os.path.join(root, file)
-                    daftar_exe[nama_bersih] = path_lengkap
+        try:
+            for root, dirs, files in os.walk(direktori):
+                for file in files:
+                    if file.lower().endswith(('.exe', '.lnk', '.url')):
+                        nama_bersih = os.path.splitext(file)[0].lower()
+                        path_lengkap = os.path.join(root, file)
+                        daftar_exe[nama_bersih] = path_lengkap
+        except Exception:
+            continue
 
     keys = list(daftar_exe.keys())
-    cocok = get_close_matches(nama_app.lower(), keys, n=1, cutoff=0.25)
-    if cocok: return daftar_exe[cocok[0]]
+    
+    # 1. Cek kecocokan persis
+    if keyword_target in keys:
+        return daftar_exe[keyword_target]
+        
+    # 2. Cek kecocokan parsial yang spesifik (menghindari false positive)
+    for nama_file, path_file in daftar_exe.items():
+        if keyword_target == nama_file or (len(keyword_target) > 3 and keyword_target in nama_file):
+            return path_file
+            
+    # 3. Gunakan pencocokan terdekat (fuzzy match dengan ambang batas ketat)
+    cocok = get_close_matches(keyword_target, keys, n=1, cutoff=0.6)
+    if cocok:
+        return daftar_exe[cocok[0]]
+        
     return None
 
 def eksekusi_shortcut_windows(perintah_lower):
@@ -343,10 +360,16 @@ def terjemahkan_aplikasi(perintah):
     for kunci_web, url_web in situs_populer.items():
         if kunci_web in kata_list: return "web", kunci_web, url_web
 
+    # 1. Cari dulu software terinstal di laptop secara akurat
+    print(f"{ABU}[INFO] Memindai software terinstal di laptop untuk: '{kata_bersih}'...{RESET}")
     path_ditemukan = cari_software_100_persen(kata_bersih)
-    if path_ditemukan: return "installed_app", kata_bersih, path_ditemukan
+    if path_ditemukan: 
+        return "installed_app", kata_bersih, path_ditemukan
 
-    return "unknown", kata_bersih, kata_bersih
+    # 2. Jika BENAR-BENAR TIDAK ADA di laptop, lakukan Google Fallback (buka Google & tampilkan ke jendela Windows)
+    print(f"{ABU}[INFO] Software tidak ditemukan terinstal di laptop. Mencari ke Google Search...{RESET}")
+    url_google = f"https://www.google.com/search?q={urllib.parse.quote(kata_bersih)}"
+    return "google_fallback", kata_bersih, url_google
 
 def main():
     banner()
@@ -409,6 +432,8 @@ def main():
             is_perintah_ketik = p_lower.startswith("ketik ") or p_lower.startswith("tulis ")
             is_perintah_layar = "lihat layar" in p_lower or "screenshot" in p_lower or "tangkap layar" in p_lower
             is_perintah_hapus = "hapus" in p_lower and ("rekaman" in p_lower or "screenshot" in p_lower or "layar" in p_lower or "foto" in p_lower)
+            
+            # Deteksi perintah navigasi kembali ke tab yang sudah dibuka
             is_perintah_navigasi = any(k in p_lower for k in ["kembali ke", "pindah ke", "ke tab"]) or (plat_key and ("kembali" in p_lower or "pindah" in p_lower))
 
             # 1. PENCARIAN FILE LINTAS MULTI-DISK & MTP HP
@@ -595,42 +620,30 @@ def main():
                 kunci_fokus_ai_lokal()
                 print()
 
-            # 7. NAVIGASI KEMBALI KE TAB BROWSER (DIPERBAIKI: PAKSA FOKUS KE BROWSER DULU BARU PINDAH TAB)
+            # 7. NAVIGASI KEMBALI KE TAB BROWSER
             elif is_perintah_navigasi and plat_key and plat_key in tab_mapping:
                 nomor_tab = tab_mapping[plat_key]
-                print(f"{ABU}[INFO] Memfokuskan browser & melompat ke Tab ke-{nomor_tab} [{plat_key}]...{RESET}")
-                
-                # Skrip PowerShell untuk mengaktifkan jendela browser (Chrome/Edge/Brave) lalu kirim shortcut tab
-                ps_switch_tab = f"""
-                Add-Type -AssemblyName Microsoft.VisualBasic
-                $browserTitles = @("Google Chrome", "Microsoft Edge", "Brave", "Mozilla Firefox")
-                foreach ($title in $browserTitles) {{
-                    try {{
-                        [Microsoft.VisualBasic.Interaction]::AppActivate($title)
-                        Start-Sleep -Milliseconds 150
-                        break
-                    }} catch {{}}
-                }}
-                $wshell = New-Object -ComObject WScript.Shell
-                $wshell.SendKeys('^{nomor_tab}' if {nomor_tab} -lt 10 else '^9')
-                """
-                # Menggunakan string kirim tombol tab presisi
-                key_send = f"^{nomor_tab}" if nomor_tab < 10 else "^9"
-                ps_fixed = f"""
-                Add-Type -AssemblyName Microsoft.VisualBasic
-                [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome")
-                Start-Sleep -Milliseconds 100
-                [Microsoft.VisualBasic.Interaction]::AppActivate("Edge")
-                Start-Sleep -Milliseconds 50
-                $wshell = New-Object -ComObject WScript.Shell
-                $wshell.SendKeys('{key_send}')
-                """
-                subprocess.Popen(["powershell", "-Command", ps_fixed], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"{EMAS}[OK] Berhasil kembali ke tab {plat_key}.")
+                print(f"{ABU}[INFO] Memfokuskan browser & berpindah ke Tab ke-{nomor_tab} [{plat_key}]...{RESET}")
+                try:
+                    ps_activate = """
+                    Add-Type -AssemblyName Microsoft.VisualBasic
+                    try { [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome") } catch {}
+                    try { [Microsoft.VisualBasic.Interaction]::AppActivate("Microsoft Edge") } catch {}
+                    """
+                    subprocess.run(["powershell", "-Command", ps_activate], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(0.15)
+                    if nomor_tab < 10:
+                        pyautogui.hotkey('ctrl', str(nomor_tab))
+                    else:
+                        pyautogui.hotkey('ctrl', '9')
+                except Exception:
+                    pass
+
+                print(f"{EMAS}[OK] Berhasil beralih ke tab {plat_key}.")
                 kunci_fokus_ai_lokal()
                 print()
 
-            # 8. BUKA WEB & APLIKASI TERINSTAL
+            # 8. BUKA WEB & APLIKASI LAPTOP (DENGAN GOOGLE FALLBACK JIKA TIDAK ADA)
             elif is_perintah_buka:
                 tipe, nama_key, target_url = terjemahkan_aplikasi(perintah)
                 
@@ -638,29 +651,38 @@ def main():
                     print(f"{ABU}[INFO] Membuka sistem Windows: {nama_key}...")
                     os.system(target_url)
                 elif tipe == "installed_app":
-                    print(f"{ABU}[INFO] Mengakses software terinstal: {nama_key}...")
+                    print(f"{ABU}[INFO] Membuka aplikasi terinstal di laptop: {nama_key}...")
                     os.system(f'start "" "{target_url}"')
                 elif tipe == "web":
                     plat_kunci = deteksi_platform_key(perintah)
                     if plat_kunci and plat_kunci in tab_mapping:
                         nomor_ada = tab_mapping[plat_kunci]
                         print(f"{ABU}[INFO] Situs {nama_key} sudah ada di Tab ke-{nomor_ada}. Beralih ke tab tersebut...")
-                        key_send = f"^{nomor_ada}" if nomor_ada < 10 else "^9"
-                        ps_script = f"""
-                        Add-Type -AssemblyName Microsoft.VisualBasic
-                        [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome")
-                        $wshell = New-Object -ComObject WScript.Shell
-                        $wshell.SendKeys('{key_send}')
-                        """
-                        subprocess.Popen(["powershell", "-Command", ps_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        try:
+                            ps_activate = """
+                            Add-Type -AssemblyName Microsoft.VisualBasic
+                            try { [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome") } catch {}
+                            try { [Microsoft.VisualBasic.Interaction]::AppActivate("Microsoft Edge") } catch {}
+                            """
+                            subprocess.run(["powershell", "-Command", ps_activate], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            time.sleep(0.15)
+                            if nomor_ada < 10:
+                                pyautogui.hotkey('ctrl', str(nomor_ada))
+                            else:
+                                pyautogui.hotkey('ctrl', '9')
+                        except Exception:
+                            pass
                     else:
                         if plat_kunci:
                             tab_mapping[plat_kunci] = counter_tab
-                            print(f"{ABU}[INFO] Membuka situs {nama_key} di Tab ke-{counter_tab}...")
+                            print(f"{ABU}[INFO] Membuka situs {nama_key} di Tab ke-{counter_tab} (Total Tab: {counter_tab})...")
                             counter_tab += 1
                         else:
                             print(f"{ABU}[INFO] Membuka situs {nama_key}...")
                         os.system(f"start {target_url}")
+                elif tipe == "google_fallback":
+                    os.system(f"start {target_url}")
+                    print(f"{EMAS}[OK] Hasil pencarian Google Search berhasil dibuka & ditampilkan di jendela browser Windows.{RESET}\n")
                 else:
                     bebas = p_lower.replace("buka", "").replace("jalankan", "").strip()
                     print(f"{ABU}[INFO] Membuka: {bebas}...")
