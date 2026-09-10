@@ -8,8 +8,21 @@ import urllib.parse
 from difflib import get_close_matches
 import pyautogui
 from PIL import Image
+import concurrent.futures
 
-# Kode Warna Tema Hitam & Emas (ANSI Escape Codes)
+# Import Modul Suara & COM API
+try:
+    import speech_recognition as sr
+except ImportError:
+    sr = None
+
+try:
+    import win32com.client
+    import pythoncom
+except ImportError:
+    pass
+
+# Kode Warna Tema
 EMAS = "\033[93m"
 HITAM = "\033[30m"
 ABU = "\033[90m"
@@ -27,14 +40,13 @@ def banner():
     clear_screen()
     waktu_sekarang = get_current_time()
     print(f"{BG_HITAM}{EMAS}===================================================={RESET}")
-    print(f"{BG_HITAM}{EMAS}          LOKAL AI - ULTIMATE TRADING AGENT         {RESET}")
+    print(f"{BG_HITAM}{EMAS}         LOKAL AI - ULTIMATE TRADING AGENT          {RESET}")
     print(f"{BG_HITAM}{EMAS}===================================================={RESET}")
     print(f"{PUTIH} Status Waktu : {EMAS}{waktu_sekarang}{RESET}")
-    print(f"{PUTIH} Mode Master: TV Active Screenshot & New Concise Prompt{RESET}")
+    print(f"{PUTIH} Mode Master: Perfect Tab Switcher & Full Skills    {RESET}")
     print(f"{BG_HITAM}{EMAS}----------------------------------------------------{RESET}\n")
 
 def kunci_fokus_ai_lokal():
-    """Melepaskan tombol nyangkut dan memaksa fokus ketikan kembali ke AI Lokal"""
     try:
         pyautogui.keyUp('ctrl')
         pyautogui.keyUp('alt')
@@ -42,13 +54,11 @@ def kunci_fokus_ai_lokal():
         pyautogui.keyUp('win')
     except Exception:
         pass
-        
     time.sleep(0.2)
     ps_focus = "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::AppActivate('AI Lokal')"
     subprocess.Popen(["powershell", "-Command", ps_focus], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def salin_gambar_ke_clipboard(path_gambar):
-    """Menyalin file gambar tangkapan layar ke clipboard Windows menggunakan PowerShell"""
     ps_copy = f"""
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('{path_gambar}'))
@@ -57,19 +67,140 @@ def salin_gambar_ke_clipboard(path_gambar):
 
 def deteksi_platform_key(teks):
     p = teks.lower()
-    if any(k in p for k in ["youtube", "yutub", "yt"]):
-        return "youtube"
-    elif any(k in p for k in ["instagram", "ig"]):
-        return "instagram"
-    elif any(k in p for k in ["fb", "facebook"]):
-        return "facebook"
-    elif any(k in p for k in ["gemini"]):
-        return "gemini"
-    elif any(k in p for k in ["whatsapp", "wa", "whatap"]):
-        return "whatsapp"
-    elif any(k in p for k in ["google"]):
-        return "google"
+    if any(k in p for k in ["youtube", "yutub", "yt"]): return "youtube"
+    elif any(k in p for k in ["instagram", "ig"]): return "instagram"
+    elif any(k in p for k in ["fb", "facebook"]): return "facebook"
+    elif any(k in p for k in ["gemini"]): return "gemini"
+    elif any(k in p for k in ["whatsapp", "wa", "whatap"]): return "whatsapp"
+    elif any(k in p for k in ["google"]): return "google"
     return None
+
+def dengarkan_suara():
+    if sr is None:
+        print(f"\n\033[91m[ERROR] Modul Suara belum terinstal.\033[0m")
+        print(f"{PUTIH}Buka terminal baru dan ketik: {EMAS}pip install SpeechRecognition PyAudio{RESET}\n")
+        return "matikan mode suara"
+        
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print(f"\n{EMAS}[🎤 LOKAL AI MENDENGARKAN...] Silakan bicara (Katakan 'Matikan mode suara' untuk keluar){RESET}")
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        try:
+            audio = recognizer.listen(source, timeout=7, phrase_time_limit=15)
+            teks = recognizer.recognize_google(audio, language="id-ID")
+            print(f"{ABU}[TERDENGAR]: {teks}{RESET}")
+            return teks
+        except sr.WaitTimeoutError:
+            pass
+        except sr.UnknownValueError:
+            print(f"{ABU}[INFO] Suara kurang jelas, AI menunggu...{RESET}")
+        except sr.RequestError as e:
+            print(f"\033[91m[ERROR] Gangguan koneksi layanan Google Voice: {e}\033[0m")
+    return ""
+
+def cari_file_100_persen(keyword):
+    print(f"\n{EMAS}[INFO] Memindai PARALEL (Super Cepat) disk Internal, Eksternal & HP untuk: '{keyword}'...{RESET}")
+    
+    keyword_lower = keyword.lower().strip()
+    keyword_parts = keyword_lower.split()
+    hasil_mentah = []
+    
+    target_direktori = []
+    for huruf_drive in range(ord('A'), ord('Z') + 1):
+        drive = chr(huruf_drive) + ":\\"
+        if os.path.exists(drive):
+            target_direktori.append(drive)
+
+    def scan_fisik(direktori):
+        lokal_hasil = []
+        try:
+            for root, dirs, files in os.walk(direktori):
+                root_lower = root.lower()
+                if any(x in root_lower for x in ["windows\\system32", "windows\\winsxs", "$recycle.bin", "appdata\\local\\temp", "node_modules", "appdata\\roaming"]):
+                    continue
+                    
+                for dirname in dirs:
+                    dirname_lower = dirname.lower()
+                    if keyword_lower in dirname_lower or all(part in dirname_lower for part in keyword_parts):
+                        lokal_hasil.append((dirname + " (Folder)", os.path.join(root, dirname)))
+                        
+                for file in files:
+                    file_lower = file.lower()
+                    if file_lower.endswith(('.xml', '.txt', '.log', '.dll', '.ini', '.rne', '.dds', '.py', '.manifest', '.cjs', '.mjs', '.ts')):
+                        continue
+                    if keyword_lower in file_lower or all(part in file_lower for part in keyword_parts):
+                        lokal_hasil.append((file, os.path.join(root, file)))
+        except Exception:
+            pass
+        return lokal_hasil
+
+    def scan_mtp():
+        lokal_hasil = []
+        try:
+            pythoncom.CoInitialize() 
+            shell = win32com.client.Dispatch("Shell.Application")
+            this_pc = shell.NameSpace(17)
+            
+            def walk_mtp(folder_obj, current_path, depth=0):
+                if depth > 5: return
+                try:
+                    items = folder_obj.Items()
+                except Exception:
+                    return
+                    
+                for item in items:
+                    try:
+                        name = item.Name
+                        name_lower = name.lower()
+                        is_match = keyword_lower in name_lower or all(part in name_lower for part in keyword_parts)
+                        
+                        if item.IsFolder:
+                            if is_match:
+                                lokal_hasil.append((name + " (MTP Folder)", current_path + "\\" + name))
+                            if name_lower not in ["android", "data", "obb", "cache", ".thumbnails", ".trashed", "miui", "system"]:
+                                walk_mtp(item.GetFolder, current_path + "\\" + name, depth + 1)
+                        else:
+                            if is_match:
+                                lokal_hasil.append((name + " (MTP File)", current_path + "\\" + name))
+                    except Exception:
+                        continue
+                        
+            for item in this_pc.Items():
+                path = item.Path
+                if not path.endswith(":\\") and item.IsFolder:
+                    if item.Name not in ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos", "Network"]:
+                        walk_mtp(item.GetFolder, item.Name)
+        except Exception:
+            pass
+        finally:
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+        return lokal_hasil
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        future_mtp = executor.submit(scan_mtp)
+        futures_fisik = [executor.submit(scan_fisik, drive) for drive in target_direktori]
+        
+        hasil_mentah.extend(future_mtp.result())
+        for future in concurrent.futures.as_completed(futures_fisik):
+            hasil_mentah.extend(future.result())
+
+    hasil_unik = []
+    seen = set()
+    for nama, path in hasil_mentah:
+        if path not in seen:
+            seen.add(path)
+            hasil_unik.append((nama, path))
+            
+    hasil_unik.sort(key=lambda x: (
+        0 if "MTP" in x[0] else (1 if not x[1].upper().startswith("C:\\") else 2),
+        0 if "folder" in x[0].lower() else 1,
+        len(x[0])
+    ))
+    
+    return hasil_unik[:20]
 
 def cari_software_100_persen(nama_app):
     lokasi_pencarian = [
@@ -97,9 +228,34 @@ def cari_software_100_persen(nama_app):
 
     keys = list(daftar_exe.keys())
     cocok = get_close_matches(nama_app.lower(), keys, n=1, cutoff=0.25)
-    if cocok:
-        return daftar_exe[cocok[0]]
+    if cocok: return daftar_exe[cocok[0]]
     return None
+
+def eksekusi_shortcut_windows(perintah_lower):
+    p = perintah_lower.replace("tekan", "").replace("shortcut", "").replace("tombol", "").strip()
+    print(f"{ABU}[INFO] Mengeksekusi shortcut Windows: {perintah_lower}...{RESET}")
+    
+    if "windows + r" in p or "win + r" in p: pyautogui.hotkey('win', 'r')
+    elif "windows + x" in p or "win + x" in p: pyautogui.hotkey('win', 'x')
+    elif "windows + d" in p or "win + d" in p: pyautogui.hotkey('win', 'd')
+    elif "windows + e" in p or "win + e" in p: pyautogui.hotkey('win', 'e')
+    elif "windows + i" in p or "win + i" in p: pyautogui.hotkey('win', 'i')
+    elif "windows + s" in p or "win + s" in p: pyautogui.hotkey('win', 's')
+    elif "windows + tab" in p or "win + tab" in p: pyautogui.hotkey('win', 'tab')
+    elif "alt + tab" in p: pyautogui.hotkey('alt', 'tab')
+    elif "ctrl + shift + esc" in p: pyautogui.hotkey('ctrl', 'shift', 'esc')
+    elif "ctrl + c" in p: pyautogui.hotkey('ctrl', 'c')
+    elif "ctrl + v" in p: pyautogui.hotkey('ctrl', 'v')
+    elif "enter" in p: pyautogui.press('enter')
+    elif "spasi" in p or "space" in p: pyautogui.press('space')
+    elif "tab" in p: pyautogui.press('tab')
+    elif "esc" in p: pyautogui.press('esc')
+    elif p in ["windows", "win"]: pyautogui.press('win')
+    else:
+        parts = [x.strip() for x in p.split("+")]
+        if len(parts) > 1: pyautogui.hotkey(*parts)
+        else: pyautogui.press(parts[0])
+    print(f"{EMAS}[OK] Shortcut berhasil dijalankan!{RESET}\n")
 
 def cari_tradingview_mendalam():
     kemungkinan_path = [
@@ -110,8 +266,7 @@ def cari_tradingview_mendalam():
         r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TradingView.lnk"
     ]
     for path in kemungkinan_path:
-        if os.path.exists(path):
-            return path
+        if os.path.exists(path): return path
     return None
 
 def terjemahkan_aplikasi(perintah):
@@ -119,12 +274,9 @@ def terjemahkan_aplikasi(perintah):
     kata_bersih = p_lower.replace("buka", "").replace("jalankan", "").replace("tolong", "").replace("coba", "").strip()
 
     if "folder" in p_lower or "drive" in p_lower or "file" in p_lower or "direktori" in p_lower:
-        if "c" in p_lower:
-            return "system", "folder c", "explorer C:\\"
-        elif "d" in p_lower:
-            return "system", "folder d", "explorer D:\\"
-        else:
-            return "system", "explorer", "explorer"
+        if "c" in p_lower: return "system", "folder c", "explorer C:\\"
+        elif "d" in p_lower: return "system", "folder d", "explorer D:\\"
+        else: return "system", "explorer", "explorer"
 
     kamus_pengaturan = {
         "pengaturan jam": "start ms-settings:dateandtime",
@@ -145,8 +297,7 @@ def terjemahkan_aplikasi(perintah):
     }
 
     for k, v in kamus_pengaturan.items():
-        if k in p_lower:
-            return "system", k, v
+        if k in p_lower: return "system", k, v
 
     situs_populer = {
         "youtube": "https://www.youtube.com",
@@ -180,8 +331,7 @@ def terjemahkan_aplikasi(perintah):
     }
     
     for k in kamus_sistem:
-        if k == kata_bersih:
-            return "system", k, kamus_sistem[k]
+        if k == kata_bersih: return "system", k, kamus_sistem[k]
 
     keys_sys = list(kamus_sistem.keys())
     cocok_sys = get_close_matches(kata_bersih, keys_sys, n=1, cutoff=0.7)
@@ -191,12 +341,10 @@ def terjemahkan_aplikasi(perintah):
 
     kata_list = kata_bersih.split()
     for kunci_web, url_web in situs_populer.items():
-        if kunci_web in kata_list:
-            return "web", kunci_web, url_web
+        if kunci_web in kata_list: return "web", kunci_web, url_web
 
     path_ditemukan = cari_software_100_persen(kata_bersih)
-    if path_ditemukan:
-        return "installed_app", kata_bersih, path_ditemukan
+    if path_ditemukan: return "installed_app", kata_bersih, path_ditemukan
 
     return "unknown", kata_bersih, kata_bersih
 
@@ -204,16 +352,29 @@ def main():
     banner()
     tab_mapping = {} 
     counter_tab = 1
+    mode_suara_aktif = False
     
     while True:
         try:
-            prompt_waktu = datetime.now().strftime("[%H:%M]")
-            perintah = input(f"{ABU}{prompt_waktu}{EMAS} LOKAL AI > {PUTIH}").strip()
-            
-            if not perintah:
-                continue
+            if mode_suara_aktif:
+                perintah = dengarkan_suara()
+                if not perintah: continue
+                p_lower = perintah.lower()
                 
-            p_lower = perintah.lower()
+                kata_pemutus = ["matikan mode suara", "stop suara", "kembali ke teks", "stop", "matikan suara"]
+                if any(k in p_lower for k in kata_pemutus):
+                    mode_suara_aktif = False
+                    print(f"{EMAS}[INFO] Mode Suara dimatikan. Kembali ke mode teks keyboard.{RESET}\n")
+                    continue
+            else:
+                prompt_waktu = datetime.now().strftime("[%H:%M]")
+                perintah = input(f"{ABU}{prompt_waktu}{EMAS} LOKAL AI > {PUTIH}").strip()
+                if not perintah: continue
+                p_lower = perintah.lower()
+                
+                if p_lower in ["mode suara", "aktifkan mode suara", "voice mode"]:
+                    mode_suara_aktif = True
+                    continue
             
             if p_lower in ["keluar", "exit", "quit"]:
                 print(f"\n{EMAS}Menutup sesi LOKAL AI. Memori dibersihkan. Sampai jumpa, Bos!{RESET}")
@@ -239,24 +400,100 @@ def main():
 
             plat_key = deteksi_platform_key(perintah)
             is_perintah_tv = any(kata in p_lower for kata in ["tradingview", "tradingwiew", "tradinview", "tradingviu", "tv", "trader"])
+            is_perintah_cari_file = p_lower.startswith("cari file ") or p_lower.startswith("buka file ") or "cari file" in p_lower
             is_perintah_buka = "buka" in p_lower or "jalankan" in p_lower
-            is_perintah_hotkey = "tekan" in p_lower or "windows" in p_lower or "hotkey" in p_lower or "enter" in p_lower or "spasi" in p_lower or "tab" in p_lower or "esc" in p_lower
+            
+            daftar_hotkey_murni = ["win + r", "win + x", "win + d", "win + e", "win + i", "win + s", "win + tab", "alt + tab", "ctrl + shift + esc", "ctrl + c", "ctrl + v", "enter", "spasi", "space", "tab", "esc", "win", "windows"]
+            is_perintah_hotkey = p_lower.startswith("tekan ") or p_lower in daftar_hotkey_murni
+
             is_perintah_ketik = p_lower.startswith("ketik ") or p_lower.startswith("tulis ")
             is_perintah_layar = "lihat layar" in p_lower or "screenshot" in p_lower or "tangkap layar" in p_lower
             is_perintah_hapus = "hapus" in p_lower and ("rekaman" in p_lower or "screenshot" in p_lower or "layar" in p_lower or "foto" in p_lower)
-            is_perintah_navigasi = any(k in p_lower for k in ["kembali ke", "pindah ke", "ke tab"])
+            is_perintah_navigasi = any(k in p_lower for k in ["kembali ke", "pindah ke", "ke tab"]) or (plat_key and ("kembali" in p_lower or "pindah" in p_lower))
 
-            # OTOMATISASI TRADINGVIEW & KIRIM KE GEMINI DENGAN PROMPT BARU
-            if is_perintah_tv:
+            # 1. PENCARIAN FILE LINTAS MULTI-DISK & MTP HP
+            if is_perintah_cari_file:
+                keyword = p_lower.replace("cari file", "").replace("buka file", "").replace("tolong", "").replace("coba", "").strip()
+                if not keyword:
+                    print(f"\033[91m[INFO] Mohon masukkan nama file yang ingin dicari.\033[0m\n")
+                    continue
+                
+                hasil = cari_file_100_persen(keyword)
+                
+                if hasil:
+                    print(f"\n{EMAS}================ HASIL PENCARIAN MULTI-DISK ================{RESET}")
+                    for idx, (nama_file, path_file) in enumerate(hasil, 1):
+                        print(f"{PUTIH}{idx}. {EMAS}{nama_file}{RESET}")
+                        print(f"   {ABU}Lokasi: {path_file}{RESET}")
+                    print(f"{EMAS}============================================================{RESET}")
+                    
+                    if mode_suara_aktif:
+                        print(f"{PUTIH}Mode Suara: Mengeksekusi pilihan pertama secara otomatis...{RESET}")
+                        pilihan_idx = 0
+                    else:
+                        pilihan = input(f"\n{PUTIH}Masukkan {EMAS}nomor pilihan{PUTIH} untuk membuka (ENTER untuk batal): ").strip()
+                        if not pilihan.isdigit(): continue
+                        pilihan_idx = int(pilihan) - 1
+
+                    if 0 <= pilihan_idx < len(hasil):
+                        nama_terpilih, path_terpilih = hasil[pilihan_idx]
+                        
+                        if "MTP" in nama_terpilih:
+                            print(f"{ABU}[INFO] Membuka langsung folder HP (MTP) yang dituju...{RESET}")
+                            try:
+                                pythoncom.CoInitialize()
+                                shell = win32com.client.Dispatch("Shell.Application")
+                                this_pc = shell.NameSpace(17) 
+                                
+                                parts = path_terpilih.split("\\")
+                                current_ns = None
+                                
+                                for item in this_pc.Items():
+                                    if item.Name.lower() == parts[0].lower():
+                                        current_ns = item.GetFolder
+                                        break
+                                        
+                                if current_ns:
+                                    for part in parts[1:-1] if "MTP File" in nama_terpilih else parts[1:]:
+                                        found = False
+                                        for subitem in current_ns.Items():
+                                            if subitem.Name.lower() == part.lower():
+                                                current_ns = subitem.GetFolder
+                                                found = True
+                                                break
+                                        if not found: break
+                                            
+                                if current_ns:
+                                    shell.Explore(current_ns.Self)
+                                    print(f"{EMAS}[OK] Jendela File Explorer berhasil dibuka di dalam folder HP!{RESET}\n")
+                                else:
+                                    clsid_this_pc = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"
+                                    os.system(f'explorer.exe "{clsid_this_pc}"')
+                            except Exception as e:
+                                print(f"\033[91m[ERROR] Gagal membuka path MTP langsung: {e}{RESET}\n")
+                        else:
+                            try:
+                                subprocess.run(f'explorer.exe /select, "{path_terpilih}"')
+                                print(f"{EMAS}[OK] Jendela File Explorer berhasil ditampilkan dan item disorot!{RESET}\n")
+                            except Exception:
+                                os.startfile(os.path.dirname(path_terpilih))
+                                print(f"{EMAS}[OK] Folder lokasi berhasil dibuka!{RESET}\n")
+                    else:
+                        print(f"\033[91m[INFO] Nomor pilihan tidak valid.{RESET}\n")
+                else:
+                    print(f"\033[91m[INFO] Maaf, item dengan kata '{keyword}' tidak ditemukan.{RESET}\n")
+                kunci_fokus_ai_lokal()
+                continue
+
+            # 2. TRADINGVIEW & GEMINI AUTOMATION
+            elif is_perintah_tv:
                 print(f"{ABU}[INFO] Membuka aplikasi TradingView Desktop Windows...{RESET}")
                 path_tv = cari_tradingview_mendalam()
                 
                 if path_tv:
                     os.startfile(path_tv)
-                    print(f"{EMAS}[INFO] Menunggu TradingView terbuka sempurna (6 detik)...{RESET}")
                     time.sleep(6)
                 else:
-                    print(f"{ABU}[INFO] Membuka TradingView melalui protokol sistem Windows...{RESET}")
                     os.system("start tradingview:")
                     time.sleep(6)
 
@@ -272,26 +509,19 @@ def main():
                 subprocess.run(["powershell", "-Command", ps_max], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(1.5)
 
-                print(f"{ABU}[INFO] Membersihkan layar dari popup (Menekan Esc)...{RESET}")
                 pyautogui.press('esc')
                 time.sleep(1.0)
 
-                print(f"{ABU}[INFO] Mengambil tangkapan layar langsung dari chart aktif...{RESET}")
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 nama_file_ss_tv = f"tradingview_chart_live_{timestamp}.png"
                 path_ss_tv = os.path.join(os.getcwd(), nama_file_ss_tv)
-                
-                screenshot_tv = pyautogui.screenshot()
-                screenshot_tv.save(path_ss_tv)
+                pyautogui.screenshot().save(path_ss_tv)
                 print(f"{EMAS}[OK] Tangkapan layar chart berhasil disimpan: {nama_file_ss_tv}{RESET}")
 
-                print(f"{EMAS}[INFO] Menyalin gambar ke Clipboard & Membuka Gemini AI...{RESET}")
                 salin_gambar_ke_clipboard(path_ss_tv)
                 os.system("start https://gemini.google.com")
-                print(f"{EMAS}[INFO] Menunggu Gemini terbuka dan siap (7 detik)...{RESET}")
                 time.sleep(7)
 
-                print(f"{ABU}[INFO] Mengaktifkan jendela browser Gemini dan menempelkan gambar (Ctrl+V)...{RESET}")
                 ps_gemini_focus = """
                 Add-Type -AssemblyName Microsoft.VisualBasic
                 [Microsoft.VisualBasic.Interaction]::AppActivate('Gemini')
@@ -301,12 +531,8 @@ def main():
                 time.sleep(1.0)
                 
                 pyautogui.hotkey('ctrl', 'v')
-                print(f"{EMAS}[OK] Gambar chart berhasil di-paste ke kolom chat Gemini!{RESET}")
                 time.sleep(2.5)
                 
-                print(f"{ABU}[INFO] Memasukkan teks prompt baru ke Gemini...")
-                
-                # PROMPT BARU SESUAI PERMINTAAN
                 prompt_advanced = (
                     "ADVANCED TRADING CHART ANALYST\n\n"
                     "Bertindaklah sebagai AI analis trading profesional. Analisis tangkapan layar chart yang diberikan secara visual dan objektif.\n\n"
@@ -328,14 +554,11 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(1.0)
                 pyautogui.press('enter')
-                
                 print(f"{EMAS}[OK] Prompt baru berhasil dikirim ke Gemini AI! Selesai.{RESET}")
-
                 kunci_fokus_ai_lokal()
-                print(f"{EMAS}[OK] Fokus dikembalikan mutlak ke LOKAL AI!\n")
 
+            # 3. HAPUS SCREENSHOT
             elif is_perintah_hapus:
-                print(f"{ABU}[INFO] Menghapus file tangkapan layar chart...{RESET}")
                 dihapus = False
                 for f in os.listdir(os.getcwd()):
                     if f.startswith("tradingview_chart_live_") and f.endswith(".png"):
@@ -346,48 +569,68 @@ def main():
                         except Exception:
                             pass
                 if not dihapus:
-                    print(f"\033[91m[INFO] Tidak ada file chart yang ditemukan untuk dihapus.\033[0m")
+                    print(f"\033[91m[INFO] Tidak ada file chart yang ditemukan untuk dihapus.{RESET}")
                 kunci_fokus_ai_lokal()
                 print()
 
+            # 4. TANGKAP LAYAR MANUAL
             elif is_perintah_layar:
-                print(f"{ABU}[INFO] Mengambil tangkapan layar manual...{RESET}")
                 nama_file_ss = f"tradingview_manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                path_ss = os.path.join(os.getcwd(), nama_file_ss)
-                pyautogui.screenshot().save(path_ss)
+                pyautogui.screenshot().save(os.path.join(os.getcwd(), nama_file_ss))
                 print(f"{EMAS}[OK] Tangkapan layar berhasil disimpan sebagai '{nama_file_ss}'.")
                 kunci_fokus_ai_lokal()
                 print()
 
+            # 5. KETIK OTOMATIS
             elif is_perintah_ketik:
                 teks_ketik = perintah.replace("ketik ", "", 1).replace("tulis ", "", 1).strip()
-                print(f"{ABU}[INFO] Mengetikkan teks secara otomatis: '{teks_ketik}'...{RESET}")
                 pyautogui.write(teks_ketik, interval=0.05)
                 print(f"{EMAS}[OK] Selesai mengetik.")
                 kunci_fokus_ai_lokal()
                 print()
 
+            # 6. SHORTCUT WINDOWS
             elif is_perintah_hotkey:
-                print(f"{ABU}[INFO] Mengeksekusi perintah keyboard sistem...")
-                if "windows + r" in p_lower or "win + r" in p_lower:
-                    pyautogui.hotkey('win', 'r')
-                elif "windows" in p_lower or "win" in p_lower:
-                    pyautogui.press('win')
-                elif "enter" in p_lower:
-                    pyautogui.press('enter')
-                elif "spasi" in p_lower or "space" in p_lower:
-                    pyautogui.press('space')
-                elif "tab" in p_lower:
-                    pyautogui.press('tab')
-                elif "esc" in p_lower:
-                    pyautogui.press('esc')
-                else:
-                    target_tombol = p_lower.replace("tekan", "").replace("tombol", "").strip()
-                    pyautogui.press(target_tombol)
-                print(f"{EMAS}[OK] Perintah keyboard berhasil dieksekusi.")
+                eksekusi_shortcut_windows(p_lower)
                 kunci_fokus_ai_lokal()
                 print()
 
+            # 7. NAVIGASI KEMBALI KE TAB BROWSER (DIPERBAIKI: PAKSA FOKUS KE BROWSER DULU BARU PINDAH TAB)
+            elif is_perintah_navigasi and plat_key and plat_key in tab_mapping:
+                nomor_tab = tab_mapping[plat_key]
+                print(f"{ABU}[INFO] Memfokuskan browser & melompat ke Tab ke-{nomor_tab} [{plat_key}]...{RESET}")
+                
+                # Skrip PowerShell untuk mengaktifkan jendela browser (Chrome/Edge/Brave) lalu kirim shortcut tab
+                ps_switch_tab = f"""
+                Add-Type -AssemblyName Microsoft.VisualBasic
+                $browserTitles = @("Google Chrome", "Microsoft Edge", "Brave", "Mozilla Firefox")
+                foreach ($title in $browserTitles) {{
+                    try {{
+                        [Microsoft.VisualBasic.Interaction]::AppActivate($title)
+                        Start-Sleep -Milliseconds 150
+                        break
+                    }} catch {{}}
+                }}
+                $wshell = New-Object -ComObject WScript.Shell
+                $wshell.SendKeys('^{nomor_tab}' if {nomor_tab} -lt 10 else '^9')
+                """
+                # Menggunakan string kirim tombol tab presisi
+                key_send = f"^{nomor_tab}" if nomor_tab < 10 else "^9"
+                ps_fixed = f"""
+                Add-Type -AssemblyName Microsoft.VisualBasic
+                [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome")
+                Start-Sleep -Milliseconds 100
+                [Microsoft.VisualBasic.Interaction]::AppActivate("Edge")
+                Start-Sleep -Milliseconds 50
+                $wshell = New-Object -ComObject WScript.Shell
+                $wshell.SendKeys('{key_send}')
+                """
+                subprocess.Popen(["powershell", "-Command", ps_fixed], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"{EMAS}[OK] Berhasil kembali ke tab {plat_key}.")
+                kunci_fokus_ai_lokal()
+                print()
+
+            # 8. BUKA WEB & APLIKASI TERINSTAL
             elif is_perintah_buka:
                 tipe, nama_key, target_url = terjemahkan_aplikasi(perintah)
                 
@@ -402,8 +645,13 @@ def main():
                     if plat_kunci and plat_kunci in tab_mapping:
                         nomor_ada = tab_mapping[plat_kunci]
                         print(f"{ABU}[INFO] Situs {nama_key} sudah ada di Tab ke-{nomor_ada}. Beralih ke tab tersebut...")
-                        key_send = f"^{nomor_ada}" if nomor_ada < 9 else "^9"
-                        ps_script = f"$wshell = New-Object -ComObject WScript.Shell; $wshell.SendKeys('{key_send}')"
+                        key_send = f"^{nomor_ada}" if nomor_ada < 10 else "^9"
+                        ps_script = f"""
+                        Add-Type -AssemblyName Microsoft.VisualBasic
+                        [Microsoft.VisualBasic.Interaction]::AppActivate("Google Chrome")
+                        $wshell = New-Object -ComObject WScript.Shell
+                        $wshell.SendKeys('{key_send}')
+                        """
                         subprocess.Popen(["powershell", "-Command", ps_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     else:
                         if plat_kunci:
@@ -421,32 +669,7 @@ def main():
                 kunci_fokus_ai_lokal()
                 print(f"{EMAS}[OK] Selesai. Fokus dikunci kembali di LOKAL AI.\n")
 
-            elif is_perintah_navigasi and plat_key and plat_key in tab_mapping:
-                nomor_tab = tab_mapping[plat_key]
-                query = p_lower
-                for kata in ["kembali ke", "pindah ke", "ke tab", "ke yt", "ke youtube", "buka tab", "di youtube", "di yutub", "di yt", "di tab yt", "di instagram", "di ig", "di fb", "kembali", "pindah", "cari", "tlg", "tolong", "coba", "video"]:
-                    query = query.replace(kata, "")
-                query = query.strip()
-
-                print(f"{ABU}[INFO] Melompat ke Tab ke-{nomor_tab} [{plat_key}] & mencari: '{query}'...")
-                key_send = f"^{nomor_tab}" if nomor_tab < 9 else "^9"
-                ps_script = f"""
-                $wshell = New-Object -ComObject WScript.Shell
-                $wshell.SendKeys('{key_send}')
-                Start-Sleep -Milliseconds 150
-                if ('{query}' -ne '') {{
-                    $wshell.SendKeys('/')
-                    Start-Sleep -Milliseconds 150
-                    $wshell.SendKeys('{query}')
-                    Start-Sleep -Milliseconds 150
-                    $wshell.SendKeys('{{ENTER}}')
-                }}
-                """
-                subprocess.Popen(["powershell", "-Command", ps_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"{EMAS}[OK] Berhasil kembali ke tab {plat_key}.")
-                kunci_fokus_ai_lokal()
-                print()
-
+            # 9. PENCARIAN GOOGLE UMUM
             else:
                 query_teks = p_lower.replace("cari", "").strip()
                 print(f"{ABU}[INFO] Memproses pencarian web umum: {query_teks}...")
@@ -457,7 +680,12 @@ def main():
                 print()
                 
         except Exception as e:
-            print(f"\n\033[91m[ERROR] Terjadi kesalahan: {e}{RESET}")
+            print(f"\n\033[91m[ERROR] Terjadi kesalahan: {e}{RESET}\n")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as err:
+        print(f"\n[CRITICAL ERROR]: {err}")
+    
+    input("\nProgram berhenti. Tekan ENTER untuk keluar...")
